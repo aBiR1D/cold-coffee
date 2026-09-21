@@ -1,0 +1,8 @@
+# Local development profile — swap target for your warehouse
+cold_coffee:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: target/cold_coffee.duckdb
+      threads: 4

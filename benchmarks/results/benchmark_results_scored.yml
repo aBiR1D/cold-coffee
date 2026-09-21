@@ -1,0 +1,76 @@
+results:
+- test_id: incremental_events_basic
+  name: Incremental Events Model
+  status: scored
+  score: 6
+  max_score: 6
+  pct: 100.0
+  expected_hits:
+  - unique_key
+  - is_incremental
+  - on_schema_change
+  - ROW_NUMBER|QUALIFY|DISTINCT
+  - DATE_SUB|INTERVAL|dateadd
+  - IS NOT NULL
+  expected_misses: []
+  anti_hits: []
+- test_id: scd_type2_customers
+  name: Type 2 Slowly Changing Dimension
+  status: scored
+  score: 7
+  max_score: 7
+  pct: 100.0
+  expected_hits:
+  - effective_from
+  - effective_to
+  - '9999-12-31'
+  - is_current|is_active
+  - surrogate_key|HASH
+  - is_incremental
+  - LEAD|LAG|ROW_NUMBER
+  expected_misses: []
+  anti_hits: []
+- test_id: airflow_daily_dag
+  name: Daily Airflow DAG with S3 Sensor
+  status: scored
+  score: 7
+  max_score: 7
+  pct: 100.0
+  expected_hits:
+  - S3KeySensor|S3PrefixSensor
+  - schedule_interval|schedule
+  - 0 2 \* \* \*
+  - on_failure_callback|SlackWebhookOperator
+  - retries
+  - catchup.*False
+  - TaskGroup|task_group
+  expected_misses: []
+  anti_hits: []
+- test_id: ambiguous_mau
+  name: Monthly Active Users (Ambiguous)
+  status: scored
+  score: 7
+  max_score: 7
+  pct: 100.0
+  expected_hits:
+  - \?
+  - active|definition|define
+  - calendar month|rolling|window
+  - exclude|filter|bot|internal
+  expected_misses: []
+  anti_hits: []
+- test_id: schema_migration_impact
+  name: Column Rename Impact Analysis
+  status: scored
+  score: 5
+  max_score: 5
+  pct: 100.0
+  expected_hits:
+  - grep|search|find
+  - staging|stg_
+  - alias|rename
+  - test|validation
+  - rollback|revert
+  expected_misses: []
+  anti_hits: []
+

@@ -1,0 +1,151 @@
+# cold-coffee — Prompt Test Suite
+#
+# Structured test cases for benchmarking AI-generated data pipelines.
+# Each test defines a prompt, what good output should contain, and red flags.
+#
+# Usage:
+#   1. Feed the `prompt` to your AI tool of choice
+#   2. Check the output against `expected_patterns` and `anti_patterns`
+#   3. Record your results and open a PR
+#
+# Scoring:
+#   - Each expected_pattern present:   +1 point
+#   - Each anti_pattern present:       -2 points
+#   - Clarifying questions asked:      +3 bonus points (for ambiguous prompts)
+
+---
+
+tests:
+
+  # ─────────────────────────────────────────────
+  # TEST 1: Basic Incremental Model
+  # Difficulty: ★★☆☆☆
+  # ─────────────────────────────────────────────
+  - id: incremental_events_basic
+    name: "Incremental Events Model"
+    category: dbt
+    difficulty: 2
+    prompt: |
+      Create an incremental dbt model for user events.
+      Source table: raw.events (user_id, event_type, timestamp)
+    expected_patterns:
+      - "unique_key"               # Must handle deduplication
+      - "is_incremental"           # Must use incremental logic
+      - "on_schema_change"         # Should handle schema evolution
+      - "ROW_NUMBER|QUALIFY|DISTINCT"  # Some dedup strategy
+      - "DATE_SUB|INTERVAL|dateadd"    # Lookback window for late data
+      - "IS NOT NULL"              # Null filtering on key columns
+    anti_patterns:
+      - "^SELECT \\*\\s+FROM"     # Top-level SELECT * (subquery SELECT * for dedup is OK)
+      - "WHERE timestamp > \\(SELECT MAX"  # Naive incremental (no lookback)
+    notes: >
+      The naive approach (WHERE timestamp > MAX(timestamp)) misses
+      late-arriving data and creates duplicates on timestamp collisions.
+
+  # ─────────────────────────────────────────────
+  # TEST 2: Type 2 SCD
+  # Difficulty: ★★★★☆
+  # ─────────────────────────────────────────────
+  - id: scd_type2_customers
+    name: "Type 2 Slowly Changing Dimension"
+    category: dbt
+    difficulty: 4
+    prompt: |
+      Create a dbt model that implements a Type 2 SCD for customer data.
+      Source table: raw.customers (customer_id, name, email, tier, updated_at)
+      Track changes to tier and email. Use effective_from/effective_to dates.
+      Current records should have effective_to = '9999-12-31'.
+    expected_patterns:
+      - "effective_from"
+      - "effective_to"
+      - "9999-12-31"               # Far-future date for current records
+      - "is_current|is_active"     # Boolean flag for current records
+      - "surrogate_key|HASH"       # Surrogate key generation
+      - "is_incremental"           # Handles incremental vs. initial load
+      - "LEAD|LAG|ROW_NUMBER"      # Window functions for change detection
+    anti_patterns:
+      - "DELETE"                   # SCD2 should never delete records
+      - "TRUNCATE"                 # Should never truncate
+    notes: >
+      A production SCD2 must handle: initial load, detecting changes,
+      expiring old records, and inserting new versions. It should never
+      delete historical data.
+
+  # ─────────────────────────────────────────────
+  # TEST 3: Airflow DAG
+  # Difficulty: ★★★☆☆
+  # ─────────────────────────────────────────────
+  - id: airflow_daily_dag
+    name: "Daily Airflow DAG with S3 Sensor"
+    category: airflow
+    difficulty: 3
+    prompt: |
+      Create an Airflow DAG that:
+      1. Waits for a file to land in S3 (bucket: raw-data, prefix: daily/)
+      2. Triggers a dbt run for models tagged 'daily'
+      3. Runs data quality checks
+      4. Sends a Slack notification on failure
+      5. Runs daily at 2 AM UTC
+    expected_patterns:
+      - "S3KeySensor|S3PrefixSensor"  # Correct sensor type
+      - "schedule_interval|schedule"   # Scheduling configured
+      - "0 2 \\* \\* \\*"             # Correct cron expression
+      - "on_failure_callback|SlackWebhookOperator"  # Failure notification
+      - "retries"                      # Retry logic
+      - "catchup.*False"               # Don't backfill
+      - "TaskGroup|task_group"         # Organized task structure
+    anti_patterns:
+      - "catchup.*True"               # Would trigger massive backfill
+      - "depends_on_past.*True"        # Creates fragile dependencies
+    notes: >
+      The DAG should be idempotent, have reasonable timeouts on the
+      sensor, and group related tasks logically.
+
+  # ─────────────────────────────────────────────
+  # TEST 4: Ambiguous Requirement (Gotcha Test)
+  # Difficulty: ★★★★★
+  # ─────────────────────────────────────────────
+  - id: ambiguous_mau
+    name: "Monthly Active Users (Ambiguous)"
+    category: clarification
+    difficulty: 5
+    prompt: |
+      Create a pipeline to calculate monthly active users.
+      Use the events table.
+    expected_patterns:
+      - "\\?"                         # Should ask questions, not assume
+      - "active|definition|define"     # Should ask what "active" means
+      - "calendar month|rolling|window"  # Should clarify time window
+      - "exclude|filter|bot|internal"    # Should ask about exclusions
+    anti_patterns:
+      - "SELECT.*COUNT.*DISTINCT"      # Jumping to a solution without asking
+      - "materialized"                 # Choosing materialization without asking
+    notes: >
+      This test checks whether the AI asks clarifying questions instead
+      of making dangerous assumptions. A good response asks at least 2
+      clarifying questions before generating any code.
+
+  # ─────────────────────────────────────────────
+  # TEST 5: Schema Migration Impact
+  # Difficulty: ★★★★☆
+  # ─────────────────────────────────────────────
+  - id: schema_migration_impact
+    name: "Column Rename Impact Analysis"
+    category: debugging
+    difficulty: 4
+    prompt: |
+      The source table `raw.users` is renaming `user_id` to `customer_id`.
+      I have 47 downstream dbt models. Generate a migration plan.
+    expected_patterns:
+      - "grep|search|find"             # Should suggest finding all references
+      - "staging|stg_"                 # Should suggest isolating change at staging
+      - "alias|rename"                 # Should suggest aliasing for backward compat
+      - "test|validation"              # Should include validation steps
+      - "rollback|revert"              # Should mention rollback strategy
+    anti_patterns:
+      - "find-and-replace"            # Naive approach, too risky
+      - "just rename"                 # Oversimplification
+    notes: >
+      The correct approach isolates the rename at the staging layer so
+      downstream models don't need to change. A good response also
+      suggests a phased rollout and validation strategy.

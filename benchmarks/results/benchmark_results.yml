@@ -1,0 +1,107 @@
+# cold-coffee benchmark results
+# Model tested: Claude (Artifacts 2.0)
+# Date: 2026-09
+# Total testing time: ~40 hours across multiple sessions
+
+summary:
+  tests_run: 5
+  tests_passed: 5
+  average_score_pct: 82.6
+  total_time_saved_estimate: "~4.5 hours across 5 scenarios"
+
+results:
+
+  - test_id: incremental_events_basic
+    name: "Incremental Events Model"
+    score: 6
+    max_score: 6
+    pct: 100.0
+    expected_hits:
+      - unique_key
+      - is_incremental
+      - on_schema_change
+      - ROW_NUMBER
+      - INTERVAL
+      - IS NOT NULL
+    expected_misses: []
+    anti_hits: []
+    time_to_generate: "15 seconds"
+    time_manual_equivalent: "30 minutes"
+    production_ready: true
+    fixes_needed: "None — added staging layer as best practice"
+
+  - test_id: scd_type2_customers
+    name: "Type 2 Slowly Changing Dimension"
+    score: 5
+    max_score: 7
+    pct: 71.4
+    expected_hits:
+      - effective_from
+      - effective_to
+      - "9999-12-31"
+      - is_current
+      - surrogate_key
+      - is_incremental
+    expected_misses:
+      - "LEAD|LAG"   # used JOIN-based change detection instead of window functions
+    anti_hits: []
+    time_to_generate: "30 seconds"
+    time_manual_equivalent: "2 hours"
+    production_ready: true
+    fixes_needed: "Added overlapping date test, staging model with email normalization"
+
+  - test_id: airflow_daily_dag
+    name: "Daily Airflow DAG with S3 Sensor"
+    score: 7
+    max_score: 7
+    pct: 100.0
+    expected_hits:
+      - S3KeySensor
+      - schedule_interval
+      - "0 2 * * *"
+      - on_failure_callback
+      - retries
+      - "catchup.*False"
+      - TaskGroup
+    expected_misses: []
+    anti_hits: []
+    time_to_generate: "20 seconds"
+    time_manual_equivalent: "45 minutes"
+    production_ready: false
+    fixes_needed: "Slack connection config, success notification, parameterize dbt path"
+
+  - test_id: ambiguous_mau
+    name: "Monthly Active Users (Ambiguous)"
+    score: 7
+    max_score: 7
+    pct: 100.0
+    expected_hits:
+      - "?"
+      - active
+      - "calendar month"
+      - exclude
+    expected_misses: []
+    anti_hits: []
+    bonus: 3
+    time_to_generate: "10 seconds"
+    time_manual_equivalent: "30 min building wrong thing + 2 hrs rebuilding"
+    production_ready: "N/A — correctly refused to generate code"
+    fixes_needed: "None"
+
+  - test_id: schema_migration_impact
+    name: "Column Rename Impact Analysis"
+    score: 4
+    max_score: 5
+    pct: 80.0
+    expected_hits:
+      - grep
+      - staging
+      - alias
+      - test
+    expected_misses:
+      - rollback   # mentioned revert but not explicit rollback plan heading
+    anti_hits: []
+    time_to_generate: "25 seconds"
+    time_manual_equivalent: "1 hour"
+    production_ready: true
+    fixes_needed: "Added CI/CD considerations, downstream consumer impact"
